@@ -6,6 +6,9 @@ CFLAGS := -O2 -Wall
 all:
 	true
 
+backTCP.o: backTCP.c backTCP.h logging.h
+	${CC} ${CFLAGS} -c -o $@ $<
+
 logging.o: logging.c logging.h
 	${CC} ${CFLAGS} -c -o $@ $<
 

@@ -1,12 +1,11 @@
-#ifndef __BTCP_H
+ifndef __BTCP_H
 #define __BTCP_H
 
 #include <stddef.h>
 #include <stdint.h>
-#include <sys/time.h>
 
 typedef struct _BTcpConfig {
-    struct timeval timeout;
+    int timeout;  // In milliseconds
     size_t max_packet_size;   // Expect sizeof(header) + max_payload
 } BTcpConfig;
 
