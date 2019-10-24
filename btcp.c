@@ -1,4 +1,5 @@
 #include "btcp.h"
+#include "logging.h"
 
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -39,6 +40,39 @@ int BTAcknowledgePacket(BTcpConnection* conn, uint8_t seq) {
 }
 
 int BTSend(BTcpConnection* conn, const void *data, size_t len) {
+    uint8_t *buf = malloc(conn->config.max_packet_size);
+    if (buf == NULL) {
+        Log(LOG_ERROR, "Buffer allocation failed");
+        return -1;
+    }
+
+    int socket = conn->socket;
+    const struct sockaddr *addr = &conn->addr;
+
+    uint8_t next_seq = conn->state.packet_sent,
+            last_acked = next_seq,
+            win_size = 1,  // Assume 1-packet window at the beginning
+            packet_sent;
+    size_t sent_len = 0;  // Nothing sent so far
+
+    while (sent_len < len) {
+        packet_sent = 0;
+        while (packet_sent < win_size) {
+            int packet_size = conn->config.max_packet_size;
+            if (len - sent_len < conn->config.max_packet_size)
+                packet_size = sizeof(BTcpHeader) + (len - sent_len);
+            BTcpHeader hdr = {
+                .btcp_seq = next_seq,
+                .data_off = sizeof(BTcpHeader)
+            };
+            memcpy(buf, &hdr, sizeof hdr);
+            memcpy(buf + sizeof hdr, data + sent_len, packet_size - sizeof(BTcpHeader));
+            sendto(socket, buf, packet_size, 0, addr, sizeof(*addr));
+            packet_sent++;
+        }
+    }
+    free(buf);
+    return sent_len;
 }
 
 int BTRecv(BTcpConnection* conn, const void *data, size_t len) {

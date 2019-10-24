@@ -7,11 +7,17 @@
 
 typedef struct _BTcpConfig {
     struct timeval timeout;
+    size_t max_packet_size;   // Expect sizeof(header) + max_payload
 } BTcpConfig;
+
+typedef struct _BTcpState {
+    uint16_t packet_sent;
+} BTcpState;
 
 typedef struct _BTcpConnection {
     int socket;
     struct sockaddr_in addr;
+    BTcpState state;
     BTcpConfig config;
 } BTcpConnection;
 
