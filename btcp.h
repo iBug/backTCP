@@ -27,7 +27,7 @@ typedef struct _BTcpHeader {
     uint8_t btcp_ack;    // acknowledgement number
     uint8_t data_off;    // data offset in bytes
     uint8_t win_wize;    // window size
-    uint8_t flag;        // flags
+    uint8_t flags;        // flags
     uint8_t padding1;    // padding byte
 } BTcpHeader;
 
