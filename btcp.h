@@ -5,8 +5,14 @@ ifndef __BTCP_H
 #include <stdint.h>
 
 typedef struct _BTcpConfig {
+    // If ACK is not received within $timeout, consider packet loss
     int timeout;  // In milliseconds
-    size_t max_packet_size;   // Expect sizeof(header) + max_payload
+
+    // If no subsequent packets come in within $timeout, ACK received ones
+    int recv_timeout;  // In milliseconds
+
+    // Self-explanatory
+    size_t max_packet_size;  // Expect sizeof(header) + max_payload
 } BTcpConfig;
 
 typedef struct _BTcpState {
@@ -27,8 +33,7 @@ typedef struct _BTcpHeader {
     uint8_t btcp_ack;    // acknowledgement number
     uint8_t data_off;    // data offset in bytes
     uint8_t win_wize;    // window size
-    uint8_t flags;        // flags
-    uint8_t padding1;    // padding byte
+    uint8_t flags;       // flags
 } BTcpHeader;
 
 /********
@@ -49,7 +54,7 @@ int BTSend(BTcpConnection* conn, const void* data, size_t len);
 // Receive a stream of data
 int BTRecv(BTcpConnection* conn, const void* data, size_t len);
 
-// Open a backTCP connection
+// Open a backTCP connection - both for connecting to server and listening
 BTcpConnection* BTOpen(unsigned long addr, unsigned short port);
 
 // Close a backTCP connection

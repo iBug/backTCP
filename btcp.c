@@ -29,10 +29,12 @@ int BTSend(BTcpConnection* conn, const void *data, size_t len) {
 
     uint8_t last_acked = conn->state.packet_sent,
             next_seq = last_acked,
+            send_win_size = 1,  // # of pending packets
+            recv_win_size = 1,  // # of available slots
             win_size = 1,  // Assume 1-packet window at the beginning
             packet_sent,
             is_retransmission = 0;
-    size_t sent_len = 0,  // Nothing sent so far
+    size_t sent_len = 0,
            offset = 0;
 
     while (sent_len < len) {
@@ -66,7 +68,7 @@ int BTSend(BTcpConnection* conn, const void *data, size_t len) {
             BTcpHeader hdr;
             memcpy(&hdr, buf, sizeof hdr);
             last_acked = hdr.btcp_ack;
-            win_size = hdr.win_size;
+            recv_win_size = hdr.win_size;
             if (last_acked != next_seq) {
                 // Some packets are lost, retransmit them
                 is_retransmission = 1;
@@ -78,7 +80,7 @@ int BTSend(BTcpConnection* conn, const void *data, size_t len) {
             continue;
         } else {
             // uh what?
-            Logf(LOG_ERROR, "Unknown");
+            Logf(LOG_ERROR, "Unknown error");
         }
     }
     free(buf);
@@ -110,5 +112,6 @@ void BTClose(BTcpConnection* conn) {
 
 void BTDefaultConfig(BTcpConnection* conn) {
     conn->config.max_packet_size = sizeof(BTcpHeader) + 64;
-    conn->config.timeout.tv_nsec = 10;  // default to 10 ms
+    conn->config.timeout = 10;  // default to 10 ms - lab requirement
+    conn->config.recv_timeout = 5;  // default to 5 ms - optimal value
 }
