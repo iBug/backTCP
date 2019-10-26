@@ -48,6 +48,7 @@ int BTSend(BTcpConnection* conn, const void *data, size_t len) {
             BTcpHeader hdr = {
                 .btcp_seq = next_seq,
                 .data_off = sizeof(BTcpHeader),
+                .win_size = win_size - packet_sent - 1, // # of remaining packets
                 .flags = 0
             };
             if (is_retransmission)
@@ -57,6 +58,7 @@ int BTSend(BTcpConnection* conn, const void *data, size_t len) {
             memcpy(buf + sizeof hdr, data, payload_size);
             send(socket, data, len, 0);
             next_seq++;
+            packet_sent++;
         }
         is_retransmission = 0;
 
@@ -88,6 +90,7 @@ int BTSend(BTcpConnection* conn, const void *data, size_t len) {
 }
 
 int BTRecv(BTcpConnection* conn, const void *data, size_t len) {
+    uint8_t *buf = malloc();
     int socket = conn->socket;
     struct sockaddr *addr = &conn->addr;
     int addrlen;

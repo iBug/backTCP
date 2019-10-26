@@ -1,4 +1,4 @@
-ifndef __BTCP_H
+#ifndef __BTCP_H
 #define __BTCP_H
 
 #include <stddef.h>
