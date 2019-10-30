@@ -13,6 +13,7 @@ typedef struct _BTcpConfig {
 
     // Self-explanatory
     size_t max_packet_size;  // Expect sizeof(header) + max_payload
+    size_t recv_buffer_size;  // # of packets for receiving buffer
 } BTcpConfig;
 
 typedef struct _BTcpState {

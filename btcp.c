@@ -90,7 +90,11 @@ int BTSend(BTcpConnection* conn, const void *data, size_t len) {
 }
 
 int BTRecv(BTcpConnection* conn, const void *data, size_t len) {
-    uint8_t *buf = malloc();
+    uint8_t *buf = malloc(conn->config.recv_buffer_size * conn->config.max_packet_size);
+    if (buf == NULL) {
+        Log(LOG_ERROR, "Failed to allocate memory");
+        return 0;
+    }
     int socket = conn->socket;
     struct sockaddr *addr = &conn->addr;
     int addrlen;
@@ -117,4 +121,5 @@ void BTDefaultConfig(BTcpConnection* conn) {
     conn->config.max_packet_size = sizeof(BTcpHeader) + 64;
     conn->config.timeout = 10;  // default to 10 ms - lab requirement
     conn->config.recv_timeout = 5;  // default to 5 ms - optimal value
+    conn->config.recv_buffer_size = 10;  // 10-packet buffer for receiving
 }
