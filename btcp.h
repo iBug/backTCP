@@ -33,8 +33,9 @@ typedef struct _BTcpHeader {
     uint8_t btcp_seq;    // sequence number
     uint8_t btcp_ack;    // acknowledgement number
     uint8_t data_off;    // data offset in bytes
-    uint8_t win_wize;    // window size
+    uint8_t win_size;    // window size
     uint8_t flags;       // flags
+    uint8_t padding;     // padding byte
 } BTcpHeader;
 
 /********
@@ -53,7 +54,7 @@ typedef struct _BTcpHeader {
 int BTSend(BTcpConnection* conn, const void* data, size_t len);
 
 // Receive a stream of data
-int BTRecv(BTcpConnection* conn, const void* data, size_t len);
+int BTRecv(BTcpConnection* conn, void* data, size_t len);
 
 // Open a backTCP connection - both for connecting to server and listening
 BTcpConnection* BTOpen(unsigned long addr, unsigned short port);
@@ -68,7 +69,6 @@ void BTDefaultConfig(BTcpConfig* config);
 * Internal Functions *
 *********************/
 
-// Send one single packet
-//int BTSendPacket(BTcpConnection* conn, const void* data, size_t len);
+// Removed from this header
 
 #endif /* __BTCP_H */

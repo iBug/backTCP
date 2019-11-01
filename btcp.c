@@ -63,7 +63,7 @@ int BTSend(BTcpConnection* conn, const void *data, size_t len) {
         is_retransmission = 0;
 
         // Poll for response for 10 ms (configurable)
-        struct pollfd pfd = {conn->socket, POLLIN, 0};
+        struct pollfd pfd = {socket, POLLIN, 0};
         ssize_t presult = poll(&pfd, 1, conn->config.timeout);
         if (presult == 1 && pfd.revents == POLLIN) {  // Something's ready
             recv(socket, buf, bufsize, 0);
@@ -85,12 +85,14 @@ int BTSend(BTcpConnection* conn, const void *data, size_t len) {
             Logf(LOG_ERROR, "Unknown error");
         }
     }
+
     free(buf);
     return sent_len;
 }
 
-int BTRecv(BTcpConnection* conn, const void *data, size_t len) {
-    uint8_t *buf = malloc(conn->config.recv_buffer_size * conn->config.max_packet_size);
+int BTRecv(BTcpConnection* conn, void *data, size_t len) {
+    const size_t bufsize = conn->recv_buffer_size;
+    uint8_t *buf = malloc(bufsize * conn->config.max_packet_size);
     if (buf == NULL) {
         Log(LOG_ERROR, "Failed to allocate memory");
         return 0;
@@ -98,7 +100,55 @@ int BTRecv(BTcpConnection* conn, const void *data, size_t len) {
     int socket = conn->socket;
     struct sockaddr *addr = &conn->addr;
     int addrlen;
-    recvfrom(socket, data, len, addr, &addrlen);
+
+    uint8_t last_acked = conn->state.packet_sent,
+            *packet_flags = malloc(bufsize);
+    size_t recv_len = 0,
+           payload_size,
+           offset = 0;
+    ssize_t received;
+    BTcpHeader hdr, response;
+
+    for (int i = 0; i < bufsize; i++)
+        packet_flags[i] = 0;
+
+    // Fetch the first packet
+    // Sender address will be given
+    recv_len = conn->config.max_packet_size;
+    received = recvfrom(socket, buf, recv_len, 0, addr, &addrlen);
+    if (received < 0) {
+        Log(LOG_ERROR, "Failed to receive initial packet");
+        goto cleanup;
+    }
+    payload_size = received - sizeof(BTcpHeader);
+    memcpy(&hdr, buf, sizeof(BTcpHeader));
+    memcpy(data + offset, buf + sizeof(BTcpHeader), payload_size);
+    offset += payload_size;
+
+    // Send the initial reply
+    last_acked = hdr.btcp_seq + 1;
+    response.btcp_ack = last_acked;
+    response.win_size = bufsize;
+    response.flags = F_ACK;
+    sendto(socket, &response, sizeof response, 0, addr, addrlen);
+
+    struct pollfd pfd = {socket, POLLIN, 0};
+    ssize_t presult;
+    while (recv_len < len) {
+        presult = poll(&pfd, 1, conn->config.recv_timeout);
+        if (presult == 1 && pfd.revents == POLLIN) {  // More packets
+        } else if (presult == 0) {
+            // Timeout, handle received packets
+        } else {
+            // pardon?
+            Log(LOG_ERROR, "Unknown error");
+        }
+    }
+
+cleanup:
+    free(buf);
+    free(packet_seq);
+    return;
 }
 
 BTcpConnection* BTOpen(unsigned long addr, unsigned short port) {
