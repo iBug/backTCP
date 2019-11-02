@@ -35,7 +35,7 @@ typedef struct _BTcpHeader {
     uint8_t data_off;    // data offset in bytes
     uint8_t win_size;    // window size
     uint8_t flags;       // flags
-    uint8_t padding;     // padding byte
+    uint8_t data_len;      // data length (excl .header)
 } BTcpHeader;
 
 /********

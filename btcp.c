@@ -5,17 +5,6 @@
 #include <sys/socket.h>
 #include <poll.h>
 
-int BTAcknowledgePacket(BTcpConnection* conn, uint8_t seq) {
-    int socket = conn->socket;
-    struct sockaddr *addr = conn->addr;
-    BTcpHeader hdr = {
-        .btcp_ack = seq,
-        .data_off = sizeof(BTcpHeader),
-        .flag = F_ACK
-    };
-    return sendto(socket, data, len, 0, (struct sockaddr*)addr, sizeof(struct sockaddr));
-}
-
 int BTSend(BTcpConnection* conn, const void *data, size_t len) {
     const size_t bufsize = conn->config.max_packet_size;
     uint8_t *buf = malloc(bufsize);
@@ -49,7 +38,8 @@ int BTSend(BTcpConnection* conn, const void *data, size_t len) {
                 .btcp_seq = next_seq,
                 .data_off = sizeof(BTcpHeader),
                 .win_size = win_size - packet_sent - 1, // # of remaining packets
-                .flags = 0
+                .flags = 0,
+                .data_len = payload_size
             };
             if (is_retransmission)
                 hdr.flags |= F_RETRANSMISSION;
@@ -92,16 +82,19 @@ int BTSend(BTcpConnection* conn, const void *data, size_t len) {
 
 int BTRecv(BTcpConnection* conn, void *data, size_t len) {
     const size_t bufsize = conn->recv_buffer_size;
-    uint8_t *buf = malloc(bufsize * conn->config.max_packet_size);
+    uint8_t *buf = malloc((1 + bufsize) * conn->config.max_packet_size);
     if (buf == NULL) {
         Log(LOG_ERROR, "Failed to allocate memory");
         return 0;
     }
+    uint8_t *packet_buf = buf + bufsize * conn->config.max_packet_size;
     int socket = conn->socket;
     struct sockaddr *addr = &conn->addr;
     int addrlen;
 
-    uint8_t last_acked = conn->state.packet_sent,
+    uint8_t last_acked = conn->state.packet_sent, // hmm
+            win_start = last_acked,               // hmmm
+            win_size = bufsize,                   // hmmmm?
             *packet_flags = malloc(bufsize);
     size_t recv_len = 0,
            payload_size,
@@ -126,7 +119,7 @@ int BTRecv(BTcpConnection* conn, void *data, size_t len) {
     offset += payload_size;
 
     // Send the initial reply
-    last_acked = hdr.btcp_seq + 1;
+    win_start = last_acked = hdr.btcp_seq + 1;
     response.btcp_ack = last_acked;
     response.win_size = bufsize;
     response.flags = F_ACK;
@@ -136,9 +129,45 @@ int BTRecv(BTcpConnection* conn, void *data, size_t len) {
     ssize_t presult;
     while (recv_len < len) {
         presult = poll(&pfd, 1, conn->config.recv_timeout);
-        if (presult == 1 && pfd.revents == POLLIN) {  // More packets
+        if (presult == 1 && pfd.revents == POLLIN) {  // A packet is here
+            ssize_t packet_len = recv(socket, packet_buf, conn->config.max_packet_size, 0);
+            // Copy the header and inspect it
+            memcpy(&hdr, packet_buf, packet_len);
+            uint8_t win_ind = hdr.btcp_seq - win_start;
+            if (win_ind >= bufsize) {
+                // Not in window = unexpected packet
+                continue;
+            } else if (packet_flags[win_ind]) {
+                // Already received - ignore
+                continue;
+            } else if (packet_len != hdr.data_off + hdr.data_len) {
+                Logf(LOG_WARNING, "Wrong packet length: Expected %d, got %d", hdr.data_off + hdr.data_len, packet_len);
+                Log(LOG_WARNING, "Discarded invalid packet");
+            }
+            // Save the packet
+            packet_flags[win_ind] = 1;
+            memcpy(buf + win_ind * conn->config.max_packet_size, packet_buf, packet_len);
         } else if (presult == 0) {
             // Timeout, handle received packets
+            int i;
+
+            // Copy complete sequences to receiver buffer
+            for (i = 0; i < bufsize; i++) {
+                if (packet_flags[i] == 0) {
+                    // This one's missing, stop
+                    break;
+                }
+                void *p = buf + i * conn->config.max_packet_size;
+                memcpy(&hdr, p, sizeof hdr);
+                memcpy(data + recv_len, p + hdr.data_off, hdr.data_len);
+                recv_len += hdr.data_len;
+            }
+            // ACK complete ones
+            last_acked += i;
+            if (i > 0) {
+                // Rotate window and buffer
+                // TODO
+            }
         } else {
             // pardon?
             Log(LOG_ERROR, "Unknown error");
