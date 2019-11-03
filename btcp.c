@@ -39,7 +39,7 @@ int BTSend(BTcpConnection* conn, const void *data, size_t len) {
         packet_sent = 0;
         next_seq = last_acked;
         while (packet_sent < win_size) {
-            int payload_size = bufsize - sizeof(BTcpHeader);
+            size_t payload_size = bufsize - sizeof(BTcpHeader);
             offset = sent_len + packet_sent * payload_size;
             if (len - offset < payload_size)
                 payload_size = len - offset;
@@ -54,9 +54,9 @@ int BTSend(BTcpConnection* conn, const void *data, size_t len) {
                 hdr.flags |= F_RETRANSMISSION;
 
             memcpy(buf, &hdr, sizeof hdr);
-            memcpy(buf + sizeof hdr, data, payload_size);
-            Logf(LOG_DEBUG, "Sending packet seq=%d, size=%d", next_seq, sizeof hdr + payload_size);
-            send(socket, data, sizeof hdr + payload_size, 0);
+            memcpy(buf + sizeof hdr, data + offset, payload_size);
+            Logf(LOG_DEBUG, "Sending packet seq=%d, size=%d, data offset=%d", next_seq, sizeof hdr + payload_size, offset);
+            send(socket, buf, sizeof hdr + payload_size, 0);
             next_seq++;
             packet_sent++;
         }
@@ -69,6 +69,8 @@ int BTSend(BTcpConnection* conn, const void *data, size_t len) {
             recv(socket, buf, bufsize, 0);
             BTcpHeader hdr;
             memcpy(&hdr, buf, sizeof hdr);
+            sent_len += (uint8_t)(hdr.btcp_ack - last_acked) * (bufsize - sizeof hdr);
+            Logf(LOG_DEBUG, "Response received, ack=%d, win=%d, last_ack=%d, sent=%d", hdr.btcp_ack, hdr.win_size, last_acked, sent_len);
             last_acked = hdr.btcp_ack;
             recv_win_size = hdr.win_size;
             if (last_acked != next_seq) {
@@ -120,18 +122,17 @@ int BTRecv(BTcpConnection* conn, void *data, size_t len) {
 
     // Fetch the first packet
     // Sender address will be given
-    recv_len = conn->config.max_packet_size;
     Log(LOG_DEBUG, "Waiting for first packet");
-    received = recvfrom(socket, buf, recv_len, 0, addr, &addrlen);
+    received = recvfrom(socket, buf, conn->config.max_packet_size, 0, addr, &addrlen);
     if (received < 0) {
         Log(LOG_ERROR, "Failed to receive initial packet");
         goto cleanup;
     }
-    Log(LOG_DEBUG, "Received first packet");
     payload_size = received - sizeof(BTcpHeader);
-    memcpy(&hdr, buf, sizeof(BTcpHeader));
+    memcpy(&hdr, buf, sizeof hdr);
     memcpy(data + offset, buf + sizeof(BTcpHeader), payload_size);
-    offset += payload_size;
+    recv_len += payload_size;
+    Logf(LOG_DEBUG, "Received first packet, len=%d seq=%d", received, hdr.btcp_seq);
 
     // Send the initial reply
     win_start = last_acked = hdr.btcp_seq + 1;
@@ -147,14 +148,13 @@ int BTRecv(BTcpConnection* conn, void *data, size_t len) {
         presult = poll(&pfd, 1, conn->config.recv_timeout);
         if (presult == 1 && pfd.revents == POLLIN) {  // A packet is here
             ssize_t packet_len = recv(socket, packet_buf, conn->config.max_packet_size, 0);
-            Logf(LOG_DEBUG, "Received packet, length=%d", packet_len);
             if (packet_len == 0) {
                 // 0-length packet: close
-                Log(LOG_DEBUG, "Zero-length packet, closing");
+                Log(LOG_DEBUG, "Received zero-length packet, closing");
                 break;
             }
             // Copy the header and inspect it
-            memcpy(&hdr, packet_buf, packet_len);
+            memcpy(&hdr, packet_buf, sizeof hdr);
             uint8_t win_ind = hdr.btcp_seq - win_start;
             if (win_ind >= bufsize) {
                 // Not in window = unexpected packet
@@ -167,29 +167,38 @@ int BTRecv(BTcpConnection* conn, void *data, size_t len) {
             } else if (packet_len != hdr.data_off + hdr.data_len) {
                 Logf(LOG_WARNING, "Wrong packet length: Expected %d, got %d", hdr.data_off + hdr.data_len, packet_len);
                 Log(LOG_WARNING, "Discarded invalid packet");
+                continue;
+            } else {
+                // Save the packet
+                Logf(LOG_DEBUG, "Received packet, len=%d, seq=%d, saving to [%d]", packet_len, hdr.btcp_seq, win_ind);
+                packet_flags[win_ind] = 1;
+                memcpy(buf + win_ind * conn->config.max_packet_size, packet_buf, packet_len);
             }
-            // Save the packet
-            packet_flags[win_ind] = 1;
-            memcpy(buf + win_ind * conn->config.max_packet_size, packet_buf, packet_len);
         } else if (presult == 0) {
             // Timeout, handle received packets
+            Log(LOG_DEBUG, "Handling received packets");
             int i;
 
             // Copy complete sequences to receiver buffer
             for (i = 0; i < bufsize; i++) {
                 if (packet_flags[i] == 0) {
                     // This one's missing, stop
+                    Logf(LOG_DEBUG, "Copied %d packets to receiver buffer", i);
                     break;
                 }
                 void *p = buf + i * conn->config.max_packet_size;
                 memcpy(&hdr, p, sizeof hdr);
+                Logf(LOG_DEBUG, "Copying packet [%d] to data+0x%X", i, recv_len);
                 memcpy(data + recv_len, p + hdr.data_off, hdr.data_len);
                 recv_len += hdr.data_len;
             }
             if (i > 0) {
                 // Rotate window and buffer
+                Logf(LOG_DEBUG, "Rotating window by %d", i);
                 memmove(buf, buf + i * conn->config.max_packet_size, (bufsize - i) * conn->config.max_packet_size);
                 memmove(packet_flags, packet_flags + i, bufsize - i);
+                for (int j = bufsize - i; j < bufsize; j++)
+                    packet_flags[j] = 0;
                 win_start += i;
             }
 
@@ -198,6 +207,7 @@ int BTRecv(BTcpConnection* conn, void *data, size_t len) {
             response.btcp_ack = last_acked;
             response.win_size = bufsize;
             response.flags = F_ACK;
+            Logf(LOG_DEBUG, "Received packets up to %hhu, acknowledging", (unsigned char)last_acked - 1U);
             sendto(socket, &response, sizeof response, 0, addr, addrlen);
         } else {
             // pardon?
@@ -206,6 +216,7 @@ int BTRecv(BTcpConnection* conn, void *data, size_t len) {
     }
 
 cleanup:
+    Log(LOG_DEBUG, "Cleaning up");
     free(buf);
     free(packet_flags);
     return recv_len;

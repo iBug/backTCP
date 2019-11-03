@@ -1,5 +1,6 @@
 CC := gcc
-CFLAGS := -g -Wall
+CFLAGS := -g -Wall -fsanitize=address
+LDFLAGS := -fsanitize=address
 
 .PHONY: all clean
 
