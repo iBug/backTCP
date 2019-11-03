@@ -9,7 +9,7 @@ btsend: main.o btcp.o logging.o
 	${CC} -o $@ $^ ${LDFLAGS}
 
 btrecv: btsend
-	ln -s $< $@
+	cp -a $< $@
 
 btcp.o: btcp.c btcp.h logging.h
 	${CC} ${CFLAGS} -c -o $@ $<
