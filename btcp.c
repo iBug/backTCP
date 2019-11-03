@@ -38,10 +38,14 @@ int BTSend(BTcpConnection* conn, const void *data, size_t len) {
     while (sent_len < len) {
         packet_sent = 0;
         next_seq = last_acked;
+        win_size = recv_win_size;
         while (packet_sent < win_size) {
             size_t payload_size = bufsize - sizeof(BTcpHeader);
             offset = sent_len + packet_sent * payload_size;
-            if (len - offset < payload_size)
+            if (offset >= len)
+                // Already sent all data
+                break;
+            else if (len - offset < payload_size)
                 payload_size = len - offset;
             BTcpHeader hdr = {
                 .btcp_seq = next_seq,
