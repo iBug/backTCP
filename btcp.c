@@ -2,6 +2,8 @@
 #include "logging.h"
 
 #include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 #include <sys/socket.h>
 #include <poll.h>
 
@@ -81,7 +83,7 @@ int BTSend(BTcpConnection* conn, const void *data, size_t len) {
 }
 
 int BTRecv(BTcpConnection* conn, void *data, size_t len) {
-    const size_t bufsize = conn->recv_buffer_size;
+    const size_t bufsize = conn->config.recv_buffer_size;
     uint8_t *buf = malloc((1 + bufsize) * conn->config.max_packet_size);
     if (buf == NULL) {
         Log(LOG_ERROR, "Failed to allocate memory");
@@ -90,7 +92,7 @@ int BTRecv(BTcpConnection* conn, void *data, size_t len) {
     uint8_t *packet_buf = buf + bufsize * conn->config.max_packet_size;
     int socket = conn->socket;
     struct sockaddr *addr = &conn->addr;
-    int addrlen;
+    socklen_t addrlen;
 
     uint8_t last_acked = conn->state.packet_sent, // hmm
             win_start = last_acked,               // hmmm
@@ -162,12 +164,19 @@ int BTRecv(BTcpConnection* conn, void *data, size_t len) {
                 memcpy(data + recv_len, p + hdr.data_off, hdr.data_len);
                 recv_len += hdr.data_len;
             }
-            // ACK complete ones
-            last_acked += i;
             if (i > 0) {
                 // Rotate window and buffer
-                // TODO
+                memmove(buf, buf + i * conn->config.max_packet_size, (bufsize - i) * conn->config.max_packet_size);
+                memmove(packet_flags, packet_flags + i, bufsize - i);
+                win_start += i;
             }
+
+            // ACK complete ones
+            last_acked += i;
+            response.btcp_ack = last_acked;
+            response.win_size = bufsize;
+            response.flags = F_ACK;
+            sendto(socket, &response, sizeof response, 0, addr, addrlen);
         } else {
             // pardon?
             Log(LOG_ERROR, "Unknown error");
@@ -176,8 +185,8 @@ int BTRecv(BTcpConnection* conn, void *data, size_t len) {
 
 cleanup:
     free(buf);
-    free(packet_seq);
-    return;
+    free(packet_flags);
+    return recv_len;
 }
 
 BTcpConnection* BTOpen(unsigned long addr, unsigned short port) {
@@ -191,7 +200,7 @@ BTcpConnection* BTOpen(unsigned long addr, unsigned short port) {
 }
 
 void BTClose(BTcpConnection* conn) {
-    BTSendPacket(conn, NULL, 0);
+    //BTSendPacket(conn, NULL, 0);
     close(conn->socket);
     free(conn);
 }

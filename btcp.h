@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <netinet/ip.h>
 
 typedef struct _BTcpConfig {
     // If ACK is not received within $timeout, consider packet loss
@@ -63,7 +64,7 @@ BTcpConnection* BTOpen(unsigned long addr, unsigned short port);
 void BTClose(BTcpConnection* conn);
 
 // Reset a backTCP config to default
-void BTDefaultConfig(BTcpConfig* config);
+void BTDefaultConfig(BTcpConnection* config);
 
 /*********************
 * Internal Functions *

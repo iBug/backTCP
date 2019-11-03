@@ -3,10 +3,15 @@ CFLAGS := -O2 -Wall
 
 .PHONY: all clean
 
-all:
-	true
+all: btsend btrecv
 
-backTCP.o: backTCP.c backTCP.h logging.h
+btsend: main.o btcp.o logging.o
+	${CC} -o $@ $^ ${LDFLAGS}
+
+btrecv: btsend
+	ln -s $< $@
+
+btcp.o: btcp.c btcp.h logging.h
 	${CC} ${CFLAGS} -c -o $@ $<
 
 logging.o: logging.c logging.h
