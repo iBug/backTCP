@@ -1,5 +1,5 @@
 CC := gcc
-CFLAGS := -O2 -Wall
+CFLAGS := -g -Wall
 
 .PHONY: all clean
 
@@ -8,8 +8,8 @@ all: btsend btrecv
 btsend: main.o btcp.o logging.o
 	${CC} -o $@ $^ ${LDFLAGS}
 
-btrecv: btsend
-	cp -a $< $@
+btrecv: main.o btcp.o logging.o
+	${CC} -o $@ $^ ${LDFLAGS}
 
 btcp.o: btcp.c btcp.h logging.h
 	${CC} ${CFLAGS} -c -o $@ $<
