@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdarg.h>
+#include <unistd.h>
 
 static int log_level = LOG_WARNING; // Default logging level
 static int log_color = 1; // Log with color
@@ -23,6 +24,7 @@ void SetLogLevel(int level) {
 
 void SetLogStream(FILE* stream) {
     log_file = stream;
+    log_color = isatty(fileno(stream));
 }
 
 static inline const char *GetLogPrefix(int level) {
@@ -37,7 +39,7 @@ void Log(int level, const char* message) {
     if (level < log_level)
         return;
     if (log_file == NULL)
-        log_file = stderr;
+        SetLogStream(stderr);
     fprintf(log_file, "%s %s\n", GetLogPrefix(level), message);
 }
 
@@ -45,7 +47,7 @@ void Logf(int level, const char* format, ...) {
     if (level < log_level)
         return;
     if (log_file == NULL)
-        log_file = stderr;
+        SetLogStream(stderr);
     fprintf(log_file, "%s ", GetLogPrefix(level));
     va_list args;
     va_start(args, format);
