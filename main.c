@@ -1,5 +1,6 @@
 #include "btcp.h"
 #include "logging.h"
+#include "help.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,11 +28,13 @@ static struct _GlobalOptions {
     .logLevel = LOG_WARNING
 };
 
-static const char *const cliArgs = "A:a:l:p:";
+static const char *const cliArgs = "A:a:hl:p:Vv";
 static const struct option cliLongArgs[] = {
     {"address", required_argument, NULL, 'a'},
     {"port", required_argument, NULL, 'p'},
+    {"help", no_argument, NULL, 'h'},
     {"log-level", required_argument, NULL, 'l'},
+    {"version", no_argument, NULL, 'v'},
     {NULL, 0, NULL, 0}  // Terminator
 };
 
@@ -107,6 +110,12 @@ int main(int argc, char **argv) {
                     return 1;
                 }
                 break;
+            case 'h':
+                GlobalOptions.action = ACTION_HELP;
+                break;
+            case 'v':
+                GlobalOptions.action = ACTION_VERSION;
+                break;
             case '?':
                 if (optopt == 'l')
                     Logf(LOG_ERROR, "Option -%c requires an argument.\n", optopt);
@@ -119,20 +128,28 @@ int main(int argc, char **argv) {
                 abort();
         }
 
-    // Validate arguments
-    if (argc - optind < 1) {
-        Log(LOG_FATAL, "Missing filename");
-        return 1;
-    }
-
     // Apply settings from arguments
     SetLogLevel(GlobalOptions.logLevel);
 
-    char *progname = basename(argv[0]);
-    if (strcmp(progname, "btsend") == 0)
-        return btsend(argc - optind, argv + optind);
-    if (strcmp(progname, "btrecv") == 0)
-        return btrecv(argc - optind, argv + optind);
-    Logf(LOG_ERROR, "Unknown command `%s`", progname);
+    if (GlobalOptions.action == ACTION_MAIN) {
+        // Validate arguments
+        if (argc - optind < 1) {
+            Log(LOG_FATAL, "Missing filename");
+            return 1;
+        }
+
+        char *progname = basename(argv[0]);
+        if (strcmp(progname, "btsend") == 0)
+            return btsend(argc - optind, argv + optind);
+        if (strcmp(progname, "btrecv") == 0)
+            return btrecv(argc - optind, argv + optind);
+        Logf(LOG_ERROR, "Unknown command `%s`", progname);
+    } else if (GlobalOptions.action == ACTION_HELP) {
+        printf("%s", HELP);
+        return 0;
+    } else if (GlobalOptions.action == ACTION_VERSION) {
+        printf("%s\n", VERSION);
+        return 0;
+    }
     return 1;
 }
