@@ -70,19 +70,17 @@ int main(int argc, char **argv) {
                 else if (toupper(optarg[0]) == 'F' || toupper(optarg[0]) == 'C')
                     GlobalOptions.logLevel = LOG_FATAL;
                 else {
-                    fprintf(stderr, "Unknown log level, valid values are\n\tdebug, info, warning, error, fatal\n");
+                    Log(LOG_ERROR, "Unknown log level, valid values are\n\tdebug, info, warning, error, fatal\n");
                     return 1;
                 }
                 break;
             case '?':
                 if (optopt == 'l')
-                    fprintf(stderr, "Option -%c requires an argument.\n", optopt);
+                    Logf(LOG_ERROR, "Option -%c requires an argument.\n", optopt);
                 else if (isprint (optopt))
-                    fprintf(stderr, "Unknown option `-%c'.\n", optopt);
+                    Logf(LOG_ERROR, "Unknown option `-%c'.\n", optopt);
                 else
-                    fprintf(stderr,
-                            "Unknown option character `\\x%x'.\n",
-                            optopt);
+                    Logf(LOG_ERROR, "Unknown option character `\\x%x'.\n", optopt);
                 return 1;
             default:
                 abort();
