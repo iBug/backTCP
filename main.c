@@ -10,16 +10,27 @@
 #include <arpa/inet.h>
 #include <libgen.h>
 
+#define ACTION_MAIN 0
+#define ACTION_HELP 1
+#define ACTION_VERSION 2
+
 static struct _GlobalOptions {
     int action;
-    const char *addr;
+    in_addr_t addr;
     unsigned short port;
     const char *filename;
     int logLevel;
-} GlobalOptions = {};
+} GlobalOptions = {
+    .action = ACTION_MAIN,
+    .addr = 0,
+    .port = 6666,
+    .logLevel = LOG_WARNING
+};
 
-static const char *const cliArgs = "+l:";
+static const char *const cliArgs = "A:a:l:p:";
 static const struct option cliLongArgs[] = {
+    {"address", required_argument, NULL, 'a'},
+    {"port", required_argument, NULL, 'p'},
     {"log-level", required_argument, NULL, 'l'},
     {NULL, 0, NULL, 0}  // Terminator
 };
@@ -51,13 +62,35 @@ int btrecv(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
-    // Default settings
-    GlobalOptions.logLevel = LOG_WARNING;
+    // Default values
+    GlobalOptions.addr = inet_addr("127.0.0.1");
 
-    // Now parse arguments
+    // Parse arguments first
     int c;
     while ((c = getopt_long(argc, argv, cliArgs, cliLongArgs, NULL)) != -1)
         switch (c) {
+            case 'a': case 'A':
+                {
+                    struct in_addr addr;
+                    int result = inet_aton(optarg, &addr);
+                    if (result == 0) {
+                        Logf(LOG_ERROR, "Invalid address '%s'", optarg);
+                        return 1;
+                    }
+                    GlobalOptions.addr = addr.s_addr;
+                } break;
+            case 'p':
+                {
+                    char *endptr;
+                    long result = strtoll(optarg, &endptr, 10);
+                    if (*endptr || result == 0) {
+                        Logf(LOG_ERROR, "Invalid port number '%s'", optarg);
+                        return 1;
+                    } else if (result < 0 || result >= (1 << 16)) {
+                        Logf(LOG_ERROR, "Port number '%d' out of range", result);
+                        return 1;
+                    }
+                } break;
             case 'l':
                 if (toupper(optarg[0]) == 'D')
                     GlobalOptions.logLevel = LOG_DEBUG;
@@ -78,7 +111,7 @@ int main(int argc, char **argv) {
                 if (optopt == 'l')
                     Logf(LOG_ERROR, "Option -%c requires an argument.\n", optopt);
                 else if (isprint (optopt))
-                    Logf(LOG_ERROR, "Unknown option `-%c'.\n", optopt);
+                    Logf(LOG_ERROR, "Unknown option '-%c'.\n", optopt);
                 else
                     Logf(LOG_ERROR, "Unknown option character `\\x%x'.\n", optopt);
                 return 1;
