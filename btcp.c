@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -11,39 +12,36 @@
 
 int BTSend(BTcpConnection* conn, const void *data, size_t len) {
     const size_t bufsize = conn->config.max_packet_size;
-    uint8_t *buf = malloc(bufsize);
+    uint8_t *buf = malloc(bufsize);  // Buffer for a single packet
     if (buf == NULL) {
-        Log(LOG_ERROR, "Buffer allocation failed");
+        Logf(LOG_ERROR, "Buffer allocation failed: %s", strerror(errno));
         return -1;
     }
 
     int socket = conn->socket;
-    const struct sockaddr_in *addr = &conn->addr;
-    Logf(LOG_DEBUG, "Connecting to %s:%d", inet_ntoa(addr->sin_addr), ntohs(addr->sin_port));
-    if (connect(socket, addr, sizeof *addr) == -1) {
-        Log(LOG_ERROR, "Failed to connect to server");
+    const struct sockaddr_in *addr = (struct sockaddr_in *)&conn->addr;
+    Logf(LOG_INFO, "Connecting to %s:%d", inet_ntoa(addr->sin_addr), ntohs(addr->sin_port));
+    if (connect(socket, (struct sockaddr *)addr, sizeof *addr) == -1) {
+        Logf(LOG_ERROR, "Failed to connect to server: %s", strerror(errno));
         goto cleanup;
     }
 
     uint8_t last_acked = conn->state.packet_sent,
-            next_seq = last_acked,
-            send_win_size = 1,  // # of pending packets
             recv_win_size = 1,  // # of available slots
             win_size = 1,  // Assume 1-packet window at the beginning
             packet_sent,
             is_retransmission = 0;
-    size_t sent_len = 0,
-           offset = 0;
+    size_t sent_len = 0;  // Size of data successfully sent (acked)
 
     while (sent_len < len) {
         packet_sent = 0;
-        next_seq = last_acked;
+        uint8_t next_seq = last_acked;
         win_size = recv_win_size;
         while (packet_sent < win_size) {
             size_t payload_size = bufsize - sizeof(BTcpHeader);
-            offset = sent_len + packet_sent * payload_size;
+            off_t offset = sent_len + packet_sent * payload_size;
             if (offset >= len)
-                // Already sent all data
+                // Already sent all data in window
                 break;
             else if (len - offset < payload_size)
                 payload_size = len - offset;
@@ -79,6 +77,7 @@ int BTSend(BTcpConnection* conn, const void *data, size_t len) {
             recv_win_size = hdr.win_size;
             if (last_acked != next_seq) {
                 // Some packets are lost, retransmit them
+                Log(LOG_DEBUG, "Packets loss detected, retransmitting");
                 is_retransmission = 1;
                 continue;
             }
@@ -88,8 +87,7 @@ int BTSend(BTcpConnection* conn, const void *data, size_t len) {
             is_retransmission = 1;
             continue;
         } else {
-            // uh what?
-            Logf(LOG_ERROR, "Unknown error");
+            Logf(LOG_ERROR, "Unknown error: %s", strerror(errno));
         }
     }
 
@@ -107,13 +105,12 @@ int BTRecv(BTcpConnection* conn, void *data, size_t len) {
     }
     uint8_t *packet_buf = buf + bufsize * conn->config.max_packet_size;
     int socket = conn->socket;
-    struct sockaddr *addr = &conn->addr;
+    struct sockaddr *addr = (struct sockaddr *)&conn->addr;
     socklen_t addrlen = sizeof *addr;
     bind(socket, addr, addrlen);
 
-    uint8_t last_acked = conn->state.packet_sent, // hmm
-            win_start = last_acked,               // hmmm
-            win_size = bufsize,                   // hmmmm?
+    uint8_t last_acked = conn->state.packet_sent,
+            win_start = last_acked,
             *packet_flags = malloc(bufsize);
     size_t recv_len = 0,
            payload_size,
@@ -125,7 +122,7 @@ int BTRecv(BTcpConnection* conn, void *data, size_t len) {
         packet_flags[i] = 0;
 
     // Fetch the first packet
-    // Sender address will be given
+    // Sender address will be given by recvfrom(2)
     Log(LOG_DEBUG, "Waiting for first packet");
     received = recvfrom(socket, buf, conn->config.max_packet_size, 0, addr, &addrlen);
     if (received < 0) {
@@ -214,8 +211,7 @@ int BTRecv(BTcpConnection* conn, void *data, size_t len) {
             Logf(LOG_DEBUG, "Received packets up to %hhu, acknowledging", (unsigned char)last_acked - 1U);
             sendto(socket, &response, sizeof response, 0, addr, addrlen);
         } else {
-            // pardon?
-            Log(LOG_ERROR, "Unknown error");
+            Logf(LOG_ERROR, "Unknown error: %s", strerror(errno));
         }
     }
 
@@ -238,7 +234,6 @@ BTcpConnection* BTOpen(unsigned long addr, unsigned short port) {
 }
 
 void BTClose(BTcpConnection* conn) {
-    //BTSendPacket(conn, NULL, 0);
     close(conn->socket);
     free(conn);
 }
