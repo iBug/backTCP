@@ -5,8 +5,10 @@
 
 #define LOG_DEBUG 0
 #define LOG_INFO 1
+#define LOG_WARN 2
 #define LOG_WARNING 2
 #define LOG_ERROR 3
+#define LOG_FATAL 4
 #define LOG_CRITICAL 4
 
 void SetLogLevel(int level);
