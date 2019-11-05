@@ -12,6 +12,9 @@ btsend: main.o btcp.o logging.o help.o
 btrecv: main.o btcp.o logging.o help.o
 	${CC} -o $@ $^ ${LDFLAGS}
 
+main.o: main.c btcp.h logging.h help.h
+	${CC} ${CFLAGS} -c -o $@ $<
+
 btcp.o: btcp.c btcp.h logging.h
 	${CC} ${CFLAGS} -c -o $@ $<
 
