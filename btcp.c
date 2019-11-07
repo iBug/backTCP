@@ -66,7 +66,7 @@ size_t BTSend(BTcpConnection* conn, const void *data, size_t len) {
 
         // Poll for response for 10 ms (configurable)
         struct pollfd pfd = {socket, POLLIN, 0};
-        ssize_t presult = poll(&pfd, 1, conn->config.timeout * 100);
+        ssize_t presult = poll(&pfd, 1, conn->config.timeout);
         if (presult == 1 && pfd.revents == POLLIN) {  // Something's ready
             recv(socket, buf, bufsize, 0);
             BTcpHeader hdr;
