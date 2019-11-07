@@ -77,7 +77,7 @@ size_t BTSend(BTcpConnection* conn, const void *data, size_t len) {
             recv_win_size = hdr.win_size;
             if (last_acked != next_seq) {
                 // Some packets are lost, retransmit them
-                Log(LOG_DEBUG, "Packets loss detected, retransmitting");
+                Log(LOG_INFO, "Packet loss detected, retransmitting");
                 is_retransmission = 1;
                 continue;
             }
@@ -155,7 +155,7 @@ size_t BTRecv(BTcpConnection* conn, void *data, size_t len) {
             }
             if (packet_len == 0) {
                 // 0-length packet: close
-                Log(LOG_DEBUG, "Received zero-length packet, closing");
+                Log(LOG_INFO, "Received zero-length packet, closing");
                 break;
             }
             // Copy the header and inspect it

@@ -96,6 +96,7 @@ int main(int argc, char **argv) {
                         Logf(LOG_ERROR, "Port number '%d' out of range", result);
                         return 1;
                     }
+                    GlobalOptions.port = result;
                 } break;
             case 'l':
                 if (toupper(optarg[0]) == 'D')
