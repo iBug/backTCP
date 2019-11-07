@@ -42,13 +42,19 @@ int btsend(int argc, char **argv) {
     Log(LOG_DEBUG, "Sending via backTCP");
     FILE *fp = fopen(argv[0], "rb");
     fseek(fp, 0L, SEEK_END);
-    size_t filesize = ftell(fp);
+    size_t filesize = ftell(fp), bufsize;
     fseek(fp, 0L, SEEK_SET);
-    void *buf = malloc(filesize);
+    void *buf = malloc(1UL << 16);
     BTcpConnection *conn = BTOpen(GlobalOptions.addr, GlobalOptions.port);
-    fread(buf, filesize, 1, fp);
+    while (filesize > 0) {
+        bufsize = filesize;
+        if (bufsize > (1UL << 16))
+            bufsize = 1UL << 16;
+        filesize -= bufsize;
+        fread(buf, bufsize, 1, fp);
+        BTSend(conn, buf, bufsize);
+    }
     fclose(fp);
-    BTSend(conn, buf, filesize);
     BTClose(conn);
     free(buf);
     return 0;
@@ -57,7 +63,7 @@ int btsend(int argc, char **argv) {
 int btrecv(int argc, char **argv) {
     Log(LOG_DEBUG, "Receiving via backTCP");
     FILE *fp = fopen(argv[0], "wb");
-    const size_t bufsize = 1UL << 15;
+    const size_t bufsize = 1UL << 16;
     void *buf = malloc(bufsize);
     BTcpConnection *conn = BTOpen(GlobalOptions.addr, GlobalOptions.port);
     size_t recv_size;

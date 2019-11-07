@@ -57,7 +57,7 @@ size_t BTSend(BTcpConnection* conn, const void *data, size_t len) {
 
             memcpy(buf, &hdr, sizeof hdr);
             memcpy(buf + sizeof hdr, data + offset, payload_size);
-            Logf(LOG_DEBUG, "Sending packet seq=%d, size=%d, data offset=%d", next_seq, sizeof hdr + payload_size, offset);
+            Logf(LOG_DEBUG, "Sending packet seq=%d, size=%d, data offset=0x%X", next_seq, sizeof hdr + payload_size, offset);
             send(socket, buf, sizeof hdr + payload_size, 0);
             next_seq++;
             packet_sent++;
