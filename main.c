@@ -57,11 +57,15 @@ int btsend(int argc, char **argv) {
 int btrecv(int argc, char **argv) {
     Log(LOG_DEBUG, "Receiving via backTCP");
     FILE *fp = fopen(argv[0], "wb");
-    void *buf = malloc(65536);
+    const size_t bufsize = 1UL << 15;
+    void *buf = malloc(bufsize);
     BTcpConnection *conn = BTOpen(GlobalOptions.addr, GlobalOptions.port);
-    size_t recv_size = BTRecv(conn, buf, 65536);
+    size_t recv_size;
+    do {
+        recv_size = BTRecv(conn, buf, bufsize);
+        fwrite(buf, recv_size, 1, fp);
+    } while (recv_size > 0);
     BTClose(conn);
-    fwrite(buf, recv_size, 1, fp);
     free(buf);
     fclose(fp);
     return 0;

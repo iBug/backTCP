@@ -93,10 +93,16 @@ size_t BTSend(BTcpConnection* conn, const void *data, size_t len) {
 
 cleanup:
     free(buf);
+    conn->state.packet_sent = last_acked;
     return sent_len;
 }
 
 size_t BTRecv(BTcpConnection* conn, void *data, size_t len) {
+    if ((conn->state.flags & F_OPEN) == 0) {
+        Log(LOG_ERROR, "Connection already closed");
+        return 0;
+    }
+
     const size_t bufsize = conn->config.recv_buffer_size;
     uint8_t *buf = malloc((1 + bufsize) * conn->config.max_packet_size);
     if (buf == NULL) {
@@ -128,6 +134,10 @@ size_t BTRecv(BTcpConnection* conn, void *data, size_t len) {
     if (received < 0) {
         Log(LOG_ERROR, "Failed to receive initial packet");
         goto cleanup;
+    } else if (received == 0) {
+        Log(LOG_INFO, "Sender trying to close connection");
+        conn->state.flags &= ~F_OPEN;
+        goto cleanup;
     }
     payload_size = received - sizeof(BTcpHeader);
     memcpy(&hdr, buf, sizeof hdr);
@@ -156,6 +166,7 @@ size_t BTRecv(BTcpConnection* conn, void *data, size_t len) {
             if (packet_len == 0) {
                 // 0-length packet: close
                 Log(LOG_INFO, "Received zero-length packet, closing");
+                conn->state.flags &= ~F_OPEN;
                 break;
             }
             // Copy the header and inspect it
@@ -193,6 +204,10 @@ size_t BTRecv(BTcpConnection* conn, void *data, size_t len) {
                 }
                 void *p = buf + i * conn->config.max_packet_size;
                 memcpy(&hdr, p, sizeof hdr);
+                if (recv_len + hdr.data_len > len) {
+                    Logf(LOG_WARNING, "No more space in receiver buffer");
+                    break;
+                }
                 Logf(LOG_DEBUG, "Copying packet [%d] to data+0x%X", i, recv_len);
                 memcpy(data + recv_len, p + hdr.data_off, hdr.data_len);
                 recv_len += hdr.data_len;
@@ -223,6 +238,7 @@ cleanup:
     Log(LOG_DEBUG, "Cleaning up");
     free(buf);
     free(packet_flags);
+    conn->state.packet_sent = last_acked;
     return recv_len;
 }
 
@@ -233,6 +249,7 @@ BTcpConnection* BTOpen(unsigned long addr, unsigned short port) {
     conn->addr.sin_family = AF_INET;
     conn->addr.sin_addr.s_addr = addr;
     conn->addr.sin_port = htons(port);
+    conn->state.flags = F_OPEN;
     conn->state.packet_sent = 0;
     return conn;
 }
@@ -240,6 +257,7 @@ BTcpConnection* BTOpen(unsigned long addr, unsigned short port) {
 void BTClose(BTcpConnection* conn) {
     send(conn->socket, NULL, 0, MSG_NOSIGNAL);
     close(conn->socket);
+    conn->state.flags &= ~F_OPEN;
     free(conn);
 }
 

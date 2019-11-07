@@ -18,6 +18,7 @@ typedef struct _BTcpConfig {
 } BTcpConfig;
 
 typedef struct _BTcpState {
+    uint8_t flags;
     uint16_t packet_sent;
 } BTcpState;
 
@@ -46,6 +47,8 @@ typedef struct _BTcpHeader {
 #define F_RETRANSMISSION 0x01
 #define F_EOT            0x02
 #define F_ACK            0x40
+
+#define F_OPEN 0x01
 
 /*****************
 * Main Functions *
