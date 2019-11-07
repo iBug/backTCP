@@ -41,13 +41,16 @@ static const struct option cliLongArgs[] = {
 int btsend(int argc, char **argv) {
     Log(LOG_DEBUG, "Sending via backTCP");
     FILE *fp = fopen(argv[0], "rb");
-    void *buf = malloc(65536);
-    BTcpConnection *conn = BTOpen(inet_addr("127.0.0.1"), 6666);
-    fread(buf, 65536, 1, fp);
-    BTSend(conn, buf, 65536);
+    fseek(fp, 0L, SEEK_END);
+    size_t filesize = ftell(fp);
+    fseek(fp, 0L, SEEK_SET);
+    void *buf = malloc(filesize);
+    BTcpConnection *conn = BTOpen(GlobalOptions.addr, GlobalOptions.port);
+    fread(buf, filesize, 1, fp);
+    fclose(fp);
+    BTSend(conn, buf, filesize);
     BTClose(conn);
     free(buf);
-    fclose(fp);
     return 0;
 }
 
@@ -55,10 +58,10 @@ int btrecv(int argc, char **argv) {
     Log(LOG_DEBUG, "Receiving via backTCP");
     FILE *fp = fopen(argv[0], "wb");
     void *buf = malloc(65536);
-    BTcpConnection *conn = BTOpen(inet_addr("0.0.0.0"), 6666);
-    BTRecv(conn, buf, 65536);
+    BTcpConnection *conn = BTOpen(GlobalOptions.addr, GlobalOptions.port);
+    size_t recv_size = BTRecv(conn, buf, 65536);
     BTClose(conn);
-    fwrite(buf, 65536, 1, fp);
+    fwrite(buf, recv_size, 1, fp);
     free(buf);
     fclose(fp);
     return 0;

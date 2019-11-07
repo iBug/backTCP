@@ -10,7 +10,7 @@
 #include <arpa/inet.h>
 #include <poll.h>
 
-int BTSend(BTcpConnection* conn, const void *data, size_t len) {
+size_t BTSend(BTcpConnection* conn, const void *data, size_t len) {
     const size_t bufsize = conn->config.max_packet_size;
     uint8_t *buf = malloc(bufsize);  // Buffer for a single packet
     if (buf == NULL) {
@@ -96,7 +96,7 @@ cleanup:
     return sent_len;
 }
 
-int BTRecv(BTcpConnection* conn, void *data, size_t len) {
+size_t BTRecv(BTcpConnection* conn, void *data, size_t len) {
     const size_t bufsize = conn->config.recv_buffer_size;
     uint8_t *buf = malloc((1 + bufsize) * conn->config.max_packet_size);
     if (buf == NULL) {
@@ -149,6 +149,10 @@ int BTRecv(BTcpConnection* conn, void *data, size_t len) {
         presult = poll(&pfd, 1, conn->config.recv_timeout);
         if (presult == 1 && pfd.revents == POLLIN) {  // A packet is here
             ssize_t packet_len = recv(socket, packet_buf, conn->config.max_packet_size, 0);
+            if (packet_len == -1) {
+                Log(LOG_WARNING, "Failed to receive packet, closing connection");
+                break;
+            }
             if (packet_len == 0) {
                 // 0-length packet: close
                 Log(LOG_DEBUG, "Received zero-length packet, closing");
@@ -234,6 +238,7 @@ BTcpConnection* BTOpen(unsigned long addr, unsigned short port) {
 }
 
 void BTClose(BTcpConnection* conn) {
+    send(conn->socket, NULL, 0, MSG_NOSIGNAL);
     close(conn->socket);
     free(conn);
 }

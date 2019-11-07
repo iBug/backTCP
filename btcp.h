@@ -52,10 +52,10 @@ typedef struct _BTcpHeader {
 *****************/
 
 // Send a stream of data
-int BTSend(BTcpConnection* conn, const void* data, size_t len);
+size_t BTSend(BTcpConnection* conn, const void* data, size_t len);
 
 // Receive a stream of data
-int BTRecv(BTcpConnection* conn, void* data, size_t len);
+size_t BTRecv(BTcpConnection* conn, void* data, size_t len);
 
 // Open a backTCP connection - both for connecting to server and listening
 BTcpConnection* BTOpen(unsigned long addr, unsigned short port);
