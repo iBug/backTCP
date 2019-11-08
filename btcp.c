@@ -221,13 +221,21 @@ size_t BTRecv(BTcpConnection* conn, void *data, size_t len) {
                     packet_flags[j] = 0;
                 win_start += i;
             }
+            last_acked += i;
+
+            // Determine how many packets are missing (selective retransmission)
+            for (i = 0; i < bufsize; i++)
+                if (packet_flags[i])
+                    break;
 
             // ACK complete ones
-            last_acked += i;
             response.btcp_ack = last_acked;
-            response.win_size = bufsize;
+            response.win_size = i;
             response.flags = F_ACK;
-            Logf(LOG_DEBUG, "Received packets up to %hhu, acknowledging", (unsigned char)last_acked - 1U);
+            if (i == bufsize)
+                Logf(LOG_DEBUG, "Received packets up to %hhu, sequence is complete", (unsigned char)last_acked - 1U);
+            else
+                Logf(LOG_DEBUG, "Received packets up to %hhu, %d missing", (unsigned char)last_acked - 1U, i);
             sendto(socket, &response, sizeof response, 0, addr, addrlen);
         } else {
             Logf(LOG_ERROR, "Unknown error: %s", strerror(errno));
