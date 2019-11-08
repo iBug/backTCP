@@ -15,7 +15,7 @@ size_t BTSend(BTcpConnection* conn, const void *data, size_t len) {
     uint8_t *buf = malloc(bufsize);  // Buffer for a single packet
     if (buf == NULL) {
         Logf(LOG_ERROR, "Buffer allocation failed: %s", strerror(errno));
-        return -1;
+        return 0;
     }
 
     int socket = conn->socket;
@@ -23,7 +23,8 @@ size_t BTSend(BTcpConnection* conn, const void *data, size_t len) {
     Logf(LOG_INFO, "Connecting to %s:%d", inet_ntoa(addr->sin_addr), ntohs(addr->sin_port));
     if (connect(socket, (struct sockaddr *)addr, sizeof *addr) == -1) {
         Logf(LOG_ERROR, "Failed to connect to server: %s", strerror(errno));
-        goto cleanup;
+        free(buf);
+        return 0UL;
     }
 
     uint8_t last_acked = conn->state.packet_sent,
@@ -94,7 +95,6 @@ size_t BTSend(BTcpConnection* conn, const void *data, size_t len) {
         }
     }
 
-cleanup:
     free(buf);
     conn->state.packet_sent = last_acked;
     return sent_len;
@@ -213,8 +213,11 @@ size_t BTRecv(BTcpConnection* conn, void *data, size_t len) {
                 memcpy(data + recv_len, p + hdr.data_off, hdr.data_len);
                 recv_len += hdr.data_len;
             }
-            Logf(LOG_DEBUG, "Copied packet [0]-[%d] to data+0x%X", i - 1, recv_len);
             if (i > 0) {
+                if (i == 1)
+                    Logf(LOG_DEBUG, "Copied packet [0] to data+0x%X", recv_len);
+                else
+                    Logf(LOG_DEBUG, "Copied packet [0]-[%d] to data+0x%X", i - 1, recv_len);
                 // Rotate window and buffer
                 Logf(LOG_DEBUG, "Rotating window by %d", i);
                 memmove(buf, buf + i * conn->config.max_packet_size, (bufsize - i) * conn->config.max_packet_size);
@@ -222,6 +225,8 @@ size_t BTRecv(BTcpConnection* conn, void *data, size_t len) {
                 for (int j = bufsize - i; j < bufsize; j++)
                     packet_flags[j] = 0;
                 win_start += i;
+            } else {
+                Log(LOG_WARNING, "No packet available");
             }
             last_acked += i;
 
