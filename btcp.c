@@ -57,11 +57,14 @@ size_t BTSend(BTcpConnection* conn, const void *data, size_t len) {
 
             memcpy(buf, &hdr, sizeof hdr);
             memcpy(buf + sizeof hdr, data + offset, payload_size);
-            Logf(LOG_DEBUG, "Sending packet seq=%d, size=%d, data offset=0x%X", next_seq, sizeof hdr + payload_size, offset);
             send(socket, buf, sizeof hdr + payload_size, 0);
             next_seq++;
             packet_sent++;
         }
+        if (last_acked == next_seq - 1)
+            Logf(LOG_DEBUG, "Sent packet seq=%d, data offset=%d", last_acked, sent_len);
+        else
+            Logf(LOG_DEBUG, "Sent packet seq=%d-%d, data offset=%d", last_acked, next_seq - 1, sent_len);
         is_retransmission = 0;
 
         // Poll for response for 10 ms (configurable)
@@ -199,7 +202,6 @@ size_t BTRecv(BTcpConnection* conn, void *data, size_t len) {
             for (i = 0; i < bufsize; i++) {
                 if (packet_flags[i] == 0) {
                     // This one's missing, stop
-                    Logf(LOG_DEBUG, "Copied %d packets to receiver buffer", i);
                     break;
                 }
                 void *p = buf + i * conn->config.max_packet_size;
@@ -208,10 +210,10 @@ size_t BTRecv(BTcpConnection* conn, void *data, size_t len) {
                     Logf(LOG_WARNING, "No more space in receiver buffer");
                     break;
                 }
-                Logf(LOG_DEBUG, "Copying packet [%d] to data+0x%X", i, recv_len);
                 memcpy(data + recv_len, p + hdr.data_off, hdr.data_len);
                 recv_len += hdr.data_len;
             }
+            Logf(LOG_DEBUG, "Copied packet [0]-[%d] to data+0x%X", i - 1, recv_len);
             if (i > 0) {
                 // Rotate window and buffer
                 Logf(LOG_DEBUG, "Rotating window by %d", i);
