@@ -65,7 +65,7 @@ size_t BTSend(BTcpConnection* conn, const void *data, size_t len) {
         if (last_acked == next_seq - 1)
             Logf(LOG_DEBUG, "Sent packet seq=%d, data offset=%d", last_acked, sent_len);
         else
-            Logf(LOG_DEBUG, "Sent packet seq=%d-%d, data offset=%d", last_acked, next_seq - 1, sent_len);
+            Logf(LOG_DEBUG, "Sent packets seq=%d-%d, data offset=%d", last_acked, next_seq - 1, sent_len);
         is_retransmission = 0;
 
         // Poll for response for 10 ms (configurable)
@@ -181,7 +181,7 @@ size_t BTRecv(BTcpConnection* conn, void *data, size_t len) {
                 continue;
             } else if (packet_flags[win_ind]) {
                 // Already received - ignore
-                Log(LOG_WARNING, "Unexpected packet: sequence number already received");
+                Logf(LOG_WARNING, "Unexpected packet: sequence %d already received", hdr.btcp_seq);
                 continue;
             } else if (packet_len != hdr.data_off + hdr.data_len) {
                 Logf(LOG_WARNING, "Wrong packet length: Expected %d, got %d", hdr.data_off + hdr.data_len, packet_len);
@@ -189,7 +189,7 @@ size_t BTRecv(BTcpConnection* conn, void *data, size_t len) {
                 continue;
             } else {
                 // Save the packet
-                Logf(LOG_DEBUG, "Received packet, len=%d, seq=%d, saving to [%d]", packet_len, hdr.btcp_seq, win_ind);
+                Logf(LOG_DEBUG, "Received packet, len=%d, seq=%d, saving to slot %d", packet_len, hdr.btcp_seq, win_ind);
                 packet_flags[win_ind] = 1;
                 memcpy(buf + win_ind * conn->config.max_packet_size, packet_buf, packet_len);
             }
@@ -207,7 +207,7 @@ size_t BTRecv(BTcpConnection* conn, void *data, size_t len) {
                 void *p = buf + i * conn->config.max_packet_size;
                 memcpy(&hdr, p, sizeof hdr);
                 if (recv_len + hdr.data_len > len) {
-                    Logf(LOG_WARNING, "No more space in receiver buffer");
+                    Logf(LOG_ERROR, "No more space in receiver buffer");
                     break;
                 }
                 memcpy(data + recv_len, p + hdr.data_off, hdr.data_len);
@@ -215,9 +215,9 @@ size_t BTRecv(BTcpConnection* conn, void *data, size_t len) {
             }
             if (i > 0) {
                 if (i == 1)
-                    Logf(LOG_DEBUG, "Copied packet [0] to data+0x%X", recv_len);
+                    Logf(LOG_DEBUG, "Copied packet [%d] to data+0x%X", last_acked, recv_len);
                 else
-                    Logf(LOG_DEBUG, "Copied packet [0]-[%d] to data+0x%X", i - 1, recv_len);
+                    Logf(LOG_DEBUG, "Copied packets [%d]-[%d] to data+0x%X", last_acked, last_acked + i - 1, recv_len);
                 // Rotate window and buffer
                 Logf(LOG_DEBUG, "Rotating window by %d", i);
                 memmove(buf, buf + i * conn->config.max_packet_size, (bufsize - i) * conn->config.max_packet_size);
